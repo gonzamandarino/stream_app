@@ -33,6 +33,18 @@ permissions:
   contents: read
 
 jobs:
+
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+    
+    - uses: azure/login@v1
+      with:
+        creds: ${{ secrets.AZ_CREDS }}
+    
+    - run: |
+        az webapp list --query "[?state=='Running']"
+        
   build:
     runs-on: ubuntu-latest
 
