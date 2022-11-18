@@ -1,158 +1,161 @@
-import altair as alt
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Nov 18 08:26:17 2022
+
+@author: tomas.maguire
+"""
+
 import pandas as pd
 import streamlit as st
-from vega_datasets import data
-
-st.set_page_config(
-    page_title="Time series annotations", page_icon="⬇", layout="centered"
+from pandas.api.types import (
+    is_categorical_dtype,
+    is_datetime64_any_dtype,
+    is_numeric_dtype,
+    is_object_dtype,
 )
+import shap
+from streamlit_shap import st_shap
+import tensorflow as tf
+from sklearn.preprocessing import StandardScaler
+
+## Titulo
+
+st.header('MedXplain :medical_symbol:')
+
+# Cuerpo
+
+st.write('Please, select your patient:')
+
+def filter_dataframe(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Adds a UI on top of a dataframe to let viewers filter columns
+    Args:
+        df (pd.DataFrame): Original dataframe
+    Returns:
+        pd.DataFrame: Filtered dataframe
+    """
+    modify = st.checkbox("Add filters")
+
+    if not modify:
+        return df
+
+    df = df.copy()
+
+    # Try to convert datetimes into a standard format (datetime, no timezone)
+    for col in df.columns:
+        if is_object_dtype(df[col]):
+            try:
+                df[col] = pd.to_datetime(df[col])
+            except Exception:
+                pass
+
+        if is_datetime64_any_dtype(df[col]):
+            df[col] = df[col].dt.tz_localize(None)
+
+    modification_container = st.container()
+
+    with modification_container:
+        to_filter_columns = st.multiselect("Filter dataframe on", df.columns)
+        for column in to_filter_columns:
+            left, right = st.columns((1, 20))
+            left.write("↳")
+            # Treat columns with < 10 unique values as categorical
+            if is_categorical_dtype(df[column]) or df[column].nunique() < 10:
+                user_cat_input = right.multiselect(
+                    f"Values for {column}",
+                    df[column].unique(),
+                    default=list(df[column].unique()),
+                )
+                df = df[df[column].isin(user_cat_input)]
+            elif is_numeric_dtype(df[column]):
+                _min = float(df[column].min())
+                _max = float(df[column].max())
+                step = (_max - _min) / 100
+                user_num_input = right.slider(
+                    f"Values for {column}",
+                    _min,
+                    _max,
+                    (_min, _max),
+                    step=step,
+                )
+                df = df[df[column].between(*user_num_input)]
+            elif is_datetime64_any_dtype(df[column]):
+                user_date_input = right.date_input(
+                    f"Values for {column}",
+                    value=(
+                        df[column].min(),
+                        df[column].max(),
+                    ),
+                )
+                if len(user_date_input) == 2:
+                    user_date_input = tuple(map(pd.to_datetime, user_date_input))
+                    start_date, end_date = user_date_input
+                    df = df.loc[df[column].between(start_date, end_date)]
+            else:
+                user_text_input = right.text_input(
+                    f"Substring or regex in {column}",
+                )
+                if user_text_input:
+                    df = df[df[column].str.contains(user_text_input)]
+
+    return df
+df = pd.read_csv('file1.csv').drop(columns=['Unnamed: 0'])
+st.dataframe(filter_dataframe(df))
+scaler = StandardScaler()
+scaler.fit(df)
+model = tf.keras.models.load_model('saved_model/my_model')
+explainer = shap.KernelExplainer(model.predict,scaler.transform(df))
+#shap_values = explainer.shap_values(scaler.transform(df),nsamples=20)
+#shap_final = shap_values[0]
 
 
-@st.experimental_memo
-def get_data():
-    source = data.stocks()
-    source = source[source.date.gt("2004-01-01")]
-    return source
+shap_final = pd.read_csv('shap.csv').to_numpy()
+#explainer = pd.read_csv('explainer.csv').to_numpy()
+
+features = ['radius_mean',
+ 'texture_mean',
+ 'perimeter_mean',
+ 'area_mean',
+ 'smoothness_mean',
+ 'compactness_mean',
+ 'concavity_mean',
+ 'concave points_mean',
+ 'symmetry_mean',
+ 'radius_se',
+ 'perimeter_se',
+ 'area_se',
+ 'compactness_se',
+ 'concavity_se',
+ 'concave points_se',
+ 'radius_worst',
+ 'texture_worst',
+ 'perimeter_worst',
+ 'area_worst',
+ 'smoothness_worst',
+ 'compactness_worst',
+ 'concavity_worst',
+ 'concave points_worst',
+ 'symmetry_worst',
+ 'fractal_dimension_worst']
 
 
-@st.experimental_memo(ttl=60 * 60 * 24)
-def get_chart(data):
-    hover = alt.selection_single(
-        fields=["date"],
-        nearest=True,
-        on="mouseover",
-        empty="none",
-    )
+form = st.form("template_form")
+student = form.text_input("Enter patient name")
+submit = form.form_submit_button("Search")
 
-    lines = (
-        alt.Chart(data, title="Evolution of stock prices")
-        .mark_line()
-        .encode(
-            x="date",
-            y="price",
-            color="symbol",
-            # strokeDash="symbol",
-        )
-    )
-
-    # Draw points on the line, and highlight based on selection
-    points = lines.transform_filter(hover).mark_circle(size=65)
-
-    # Draw a rule at the location of the selection
-    tooltips = (
-        alt.Chart(data)
-        .mark_rule()
-        .encode(
-            x="yearmonthdate(date)",
-            y="price",
-            opacity=alt.condition(hover, alt.value(0.3), alt.value(0)),
-            tooltip=[
-                alt.Tooltip("date", title="Date"),
-                alt.Tooltip("price", title="Price (USD)"),
-            ],
-        )
-        .add_selection(hover)
-    )
-
-    return (lines + points + tooltips).interactive()
-
-
-st.title("⬇ Time series annotations")
-
-st.write("Give more context to your time series using annotations!")
-
-col1, col2, col3 = st.columns(3)
-with col1:
-    ticker = st.text_input("Choose a ticker (⬇💬👇ℹ️ ...)", value="⬇")
-with col2:
-    ticker_dx = st.slider(
-        "Horizontal offset", min_value=-30, max_value=30, step=1, value=0
-    )
-with col3:
-    ticker_dy = st.slider(
-        "Vertical offset", min_value=-30, max_value=30, step=1, value=-10
-    )
-
-# Original time series chart. Omitted `get_chart` for clarity
-source = get_data()
-chart = get_chart(source)
-
-# Input annotations
-ANNOTATIONS = [
-    ("Mar 01, 2008", "Pretty good day for GOOG"),
-    ("Dec 01, 2007", "Something's going wrong for GOOG & AAPL"),
-    ("Nov 01, 2008", "Market starts again thanks to..."),
-    ("Dec 01, 2009", "Small crash for GOOG after..."),
-]
-
-# Create a chart with annotations
-annotations_df = pd.DataFrame(ANNOTATIONS, columns=["date", "event"])
-annotations_df.date = pd.to_datetime(annotations_df.date)
-annotations_df["y"] = 0
-annotation_layer = (
-    alt.Chart(annotations_df)
-    .mark_text(size=15, text=ticker, dx=ticker_dx, dy=ticker_dy, align="center")
-    .encode(
-        x="date:T",
-        y=alt.Y("y:Q"),
-        tooltip=["event"],
-    )
-    .interactive()
-)
-
-# Display both charts together
-st.altair_chart((chart + annotation_layer).interactive(), use_container_width=True)
-
-st.write("## Code")
-
-st.write(
-    "See more in our public [GitHub repository](https://github.com/streamlit/example-app-time-series-annotation)"
-)
-
-st.code(
-    f"""
-import altair as alt
-import pandas as pd
-import streamlit as st
-from vega_datasets import data
-
-@st.experimental_memo
-def get_data():
-    source = data.stocks()
-    source = source[source.date.gt("2004-01-01")]
-    return source
-
-source = get_data()
-
-# Original time series chart. Omitted `get_chart` for clarity
-chart = get_chart(source)
-
-# Input annotations
-ANNOTATIONS = [
-    ("Mar 01, 2008", "Pretty good day for GOOG"),
-    ("Dec 01, 2007", "Something's going wrong for GOOG & AAPL"),
-    ("Nov 01, 2008", "Market starts again thanks to..."),
-    ("Dec 01, 2009", "Small crash for GOOG after..."),
-]
-
-# Create a chart with annotations
-annotations_df = pd.DataFrame(ANNOTATIONS, columns=["date", "event"])
-annotations_df.date = pd.to_datetime(annotations_df.date)
-annotations_df["y"] = 0
-annotation_layer = (
-    alt.Chart(annotations_df)
-    .mark_text(size=15, text="{ticker}", dx={ticker_dx}, dy={ticker_dy}, align="center")
-    .encode(
-        x="date:T",
-        y=alt.Y("y:Q"),
-        tooltip=["event"],
-    )
-    .interactive()
-)
-
-# Display both charts together
-st.altair_chart((chart + annotation_layer).interactive(), use_container_width=True)
-
-""",
-    "python",
-)
+if submit:
+	student = int(student)
+	#explainer = explainer
+	#shap_final = shap_final
+	try:
+		st.dataframe(df.iloc[[student]])
+		st.success("Your patient was found")
+		shap_final = shap_final
+		st.write('*Overall model explainability:*')
+		st_shap(shap.summary_plot(shap_final,df,feature_names=features))
+		st.write('*Patient outcome explainability:*')
+		st_shap(shap.force_plot(explainer.expected_value, shap_final[student,:],df.values[student,:],feature_names=features,matplotlib=False,link="logit"))
+	except:
+		st.error('Patient not found')
+		
+		   
