@@ -34,17 +34,6 @@ permissions:
 
 jobs:
 
-  build-and-deploy:
-    runs-on: ubuntu-latest
-    steps:
-    
-    - uses: azure/login@v1
-      with:
-        creds: ${{ secrets.AZ_CREDS }}
-    
-    - run: |
-        az webapp list --query "[?state=='Running']"
-        
   build:
     runs-on: ubuntu-latest
 
@@ -91,12 +80,12 @@ jobs:
           name: python-app
           path: .
       
-      - name: Azure login
-        uses: azure/actions/login@v1
-        env:
-          CREDENTIALS: ${{ secrets.AZ_CREDS }}
-        with:
-          creds: ${{ env.CREDENTIALS }}
+#      - name: Azure login
+#        uses: azure/actions/login@v1
+#        env:
+#          CREDENTIALS: ${{ secrets.AZ_CREDS }}
+#        with:
+#          creds: ${{ env.CREDENTIALS }}
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
