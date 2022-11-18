@@ -3,7 +3,7 @@
     "contentVersion": "1.0.0.1",
     "parameters": {
         "webAppName": {
-            "value": "streamlit-azure-app-services-example"
+            "value": "medxplain"
         },
         "sku": {
             "value": "B1"
@@ -12,7 +12,7 @@
             "value": "PYTHON|3.7"
         },
         "repoUrl": {
-            "value": "https://github.com/benalexkeen/streamlit-azure-app-services.git"
+            "value": "https://github.com/gonzamandarino/stream_app.git"
         },
         "repoBranch": {
             "value": "main"
