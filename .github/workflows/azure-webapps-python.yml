@@ -81,8 +81,10 @@ jobs:
       
       - name: Azure login
         uses: azure/actions/login@v1
+        env:
+          CREDENTIALS: ${{ secrets.AZ_CREDS }}
         with:
-          creds: ${{ secrets.AZ_CREDS }}
+          creds: ${{ env.CREDENTIALS }}
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp
